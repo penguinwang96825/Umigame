@@ -10,6 +10,8 @@ from ..utils import column_name_lower, crossover, crossunder
 
 class TurtleStrategy(BaseStrategy):
 
+    RISK_COEFFICIENT = 0.01
+
     def __init__(self, universe, window_up=20, window_down=10, window_atr=20):
         super().__init__()
         self.universe = universe
@@ -31,9 +33,9 @@ class TurtleStrategy(BaseStrategy):
             timeperiod=window_atr
         )
         
-    def run(self, capital=10000, fee=0.001, position=0, quota=0.5, verbose=False):
+    def run(self, capital=10000, fee=0.001, position=0, verbose=False):
         entry, exit = self.generate_signals(self.universe)
-        self.trades = self.trade(self.universe, entry, exit, capital, fee, position, quota, verbose)
+        self.trades = self.trade(self.universe, entry, exit, capital, fee, position, verbose)
 
     def generate_signals(self, universe):
         # Compute signal based on Donchian Channel
@@ -43,7 +45,92 @@ class TurtleStrategy(BaseStrategy):
         entry, exit = entry[~np.isnan(entry)], exit[~np.isnan(exit)]
         return entry, exit
 
-    def trade(self, universe, entry, exit, capital=10000, fee=0.001, position=0, quota=0.5, verbose=True):
+    def trade(self, universe, entry, exit, capital=10000, fee=0.001, position=0, verbose=True):
+        universe.loc[(entry==1).index, 'signal'] = 1
+        universe.loc[(exit==1).index, 'signal'] = 0
+        universe["value"] = capital
+        balance = capital
+        for idx, row in universe.iterrows():
+            if row["signal"] == 1:
+                if balance > 0:
+                    buy_price = row["close"]
+                    buy_date = pd.to_datetime(idx).date()
+                    unit = row["value"] * self.RISK_COEFFICIENT / row["atr"]
+                    balance = balance - unit * buy_price * (1+fee)
+                    position = position + unit
+                    if verbose:
+                        print(f"Buy {unit * buy_price:.4f} at {buy_price:.4f} on {buy_date}")
+                        print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                        print("-"*50)
+            elif row["signal"] == 0:
+                if position > 1:
+                    sell_price = row["close"]
+                    sell_date = pd.to_datetime(idx).date()
+                    amount = math.floor(position * 1.0)
+                    balance = balance + amount * sell_price * (1+fee)
+                    position = position - amount
+                    if verbose:
+                        print(f"Sell {amount * sell_price:.4f} at {sell_price:.4f} on {sell_date}")
+                        print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                        print("-"*50)
+            universe.loc[idx, "value"] = balance + position * row["close"]
+            universe.loc[idx, "balance"] = balance
+            universe.loc[idx, "position"] = position
+        return universe
+
+
+class DonchianChannelStrategy(BaseStrategy):
+
+    def __init__(self, universe, window_up=20, window_down=10):
+        super().__init__()
+        self.universe = universe
+        self.initialise(window_up, window_down)
+
+    def initialise(self, window_up, window_down):
+        self.universe = column_name_lower(self.universe)
+        # Compute returns
+        self.universe['ret'] = self.universe["close"] / self.universe["close"].shift(1) - 1
+        self.universe['ret'][0] = 0
+
+        # Donchian Channel
+        self.universe['dc_high'] = talib.MAX(self.universe["high"], timeperiod=window_up).shift(1)
+        self.universe['dc_low'] = talib.MIN(self.universe["low"], timeperiod=window_down).shift(1)
+        
+    def run(self, capital=10000, fee=0.001, position=0, quota=0.5, stop_loss=0.01, take_profit=0.02, verbose=False):
+        entry, exit = self.generate_signals(self.universe)
+        self.trades = self.trade(
+            self.universe, 
+            entry, exit, 
+            capital, 
+            fee, 
+            stop_loss, 
+            take_profit, 
+            position, 
+            quota, 
+            verbose
+        )
+
+    def generate_signals(self, universe):
+        # Compute signal based on Donchian Channel
+        entry = crossover(universe["close"], universe['dc_high']).astype(int)
+        exit = crossunder(universe["close"], universe['dc_low']).astype(int)
+        entry[entry==0], exit[exit==0] = np.nan, np.nan
+        entry, exit = entry[~np.isnan(entry)], exit[~np.isnan(exit)]
+        return entry, exit
+
+    def trade(
+            self, 
+            universe, 
+            entry, 
+            exit, 
+            capital=10000, 
+            fee=0.001, 
+            stop_loss=0.01, 
+            take_profit=0.02, 
+            position=0, 
+            quota=0.5, 
+            verbose=True
+        ):
         universe.loc[(entry==1).index, 'signal'] = 1
         universe.loc[(exit==1).index, 'signal'] = 0
         balance = capital
