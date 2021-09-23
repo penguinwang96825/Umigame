@@ -1,0 +1,7 @@
+empyrical
+matplotlib
+numpy
+pandas
+seaborn
+tqdm
+yfinance
