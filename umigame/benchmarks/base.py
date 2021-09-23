@@ -22,13 +22,13 @@ class BaseStrategy(ABC):
         raise NotImplementedError
 
     def calculate_rets(self, universe):
-        if not hasattr(self, "trades"):
+        if not hasattr(self, "statements"):
             raise NotRunError("Strategy has not been run...")
         rets = universe["value"].pct_change(1)
         return rets
 
     def score(self, scoring="sharpe_ratio"):
-        if not hasattr(self, "trades"):
+        if not hasattr(self, "statements"):
             raise NotRunError("Strategy has not been run...")
         rets = self.calculate_rets(self.universe)
         return metric_from_name(scoring)(rets)
@@ -42,7 +42,7 @@ class BuyAndHoldStrategy(BaseStrategy):
         self.universe = column_name_lower(self.universe)
 
     def run(self, capital=10000, fee=0.0, position=0, quota=1.0, verbose=False):
-        self.trades = self.trade(self.universe, capital, fee, position, quota, verbose)
+        self.statements = self.trade(self.universe, capital, fee, position, quota, verbose)
 
     def trade(self, universe, capital=10000, fee=0.001, position=0, quota=0.5, verbose=True):
         universe["signal"] = np.nan
@@ -122,7 +122,9 @@ def metric_from_name(name):
         sharpe_ratio, 
         sortino_ratio, 
         calmars_ratio, 
-        max_drawdown
+        max_drawdown, 
+        annualise_returns, 
+        annualise_volatility
     )
     return {m.__name__: m for m in metrics}[name]
 
