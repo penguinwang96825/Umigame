@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from .base import BaseStrategy
 from ..utils import column_name_lower, crossover, crossunder
+from ..plotting import *
 
 
 class TurtleStrategy(BaseStrategy):
@@ -13,8 +14,9 @@ class TurtleStrategy(BaseStrategy):
     RISK_COEFFICIENT = 0.01
 
     def __init__(self, universe, window_up=20, window_down=10, window_atr=20):
-        super().__init__()
+        super(TurtleStrategy, self).__init__()
         self.universe = universe
+        self.statements = None
         self.initialise(window_up, window_down, window_atr)
 
     def initialise(self, window_up, window_down, window_atr):
@@ -63,7 +65,7 @@ class TurtleStrategy(BaseStrategy):
             fee=0.001, 
             stop_loss=0.1, 
             take_profit=0.5, 
-            position=0, 
+            total_amount=0, 
             verbose=True
         ):
         universe.loc[(entry==1).index, 'signal'] = 1
@@ -77,56 +79,61 @@ class TurtleStrategy(BaseStrategy):
                 stop_loss_price = row["close"]
                 stop_loss_date = pd.to_datetime(idx).date()
                 if row["close"] < buy_price-2*row["atr"]:
-                    balance += stop_loss_price * position * (1-fee)
-                    position -= position
+                    balance += stop_loss_price * total_amount * (1-fee)
+                    total_amount = 0
                 else:
-                    balance += stop_loss_price * math.floor(position * 0.5) * (1-fee)
-                    position -= math.floor(position * 0.5)
+                    balance += stop_loss_price * math.floor(total_amount * 0.5) * (1-fee)
+                    total_amount -= math.floor(total_amount * 0.5)
                 if verbose:
                     print(f"Stop loss at price {stop_loss_price:.4f} on {stop_loss_date}")
                     print(f"Last buy at {buy_price:.4f}")
-                    print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                    print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                     print("-"*50)
             # Take profit
             elif (buy_price is not None) and (take_profit is not None) and (row["close"] >= buy_price*(1.0+take_profit)):
                 take_profit_price = row["close"]
                 take_profit_date = pd.to_datetime(idx).date()
-                balance += take_profit_price * math.floor(position * 0.5) * (1-fee)
-                position -= math.floor(position * 0.5)
+                balance += take_profit_price * math.floor(total_amount * 0.5) * (1-fee)
+                total_amount -= math.floor(total_amount * 0.5)
                 if verbose:
                     print(f"Take profit at price {take_profit_price:.4f} on {take_profit_date}")
                     print(f"Last buy at {take_profit_date:.4f}")
-                    print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                    print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                     print("-"*50)
 
+            # Buy signal
             if row["signal"] == 1:
                 if balance > 0:
                     buy_price = row["close"]
                     buy_date = pd.to_datetime(idx).date()
                     unit = row["value"] * self.RISK_COEFFICIENT / row["atr"]
                     balance = balance - unit * buy_price * (1+fee)
-                    position = position + unit
+                    total_amount = total_amount + unit
                     if verbose:
                         print(f"Buy {unit * buy_price:.4f} at {buy_price:.4f} on {buy_date}")
-                        print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                        print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                         print("-"*50)
+            # Sell signal
             elif row["signal"] == 0:
-                if position > 1:
+                if total_amount > 1:
                     sell_price = row["close"]
                     sell_date = pd.to_datetime(idx).date()
-                    amount = math.floor(position * 1.0)
-                    balance = balance + amount * sell_price * (1+fee)
-                    position = position - amount
+                    sell_amount = total_amount * 1.0
+                    balance = balance + sell_amount * sell_price * (1+fee)
+                    total_amount = total_amount - sell_amount
                     if verbose:
-                        print(f"Sell {amount * sell_price:.4f} at {sell_price:.4f} on {sell_date}")
-                        print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                        print(f"Sell {sell_amount * sell_price:.4f} at {sell_price:.4f} on {sell_date}")
+                        print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                         print("-"*50)
-            universe.loc[idx, "value"] = balance + position * row["close"]
+            universe.loc[idx, "value"] = balance + total_amount * row["close"]
             universe.loc[idx, "balance"] = balance
-            universe.loc[idx, "position"] = position
-        return universe
+            universe.loc[idx, "total_amount"] = total_amount
+        
+        statements = universe.copy()
+        
+        return statements
 
-    def plot(self):
+    def plot(self, whole_screen=False):
 
         def align_xticks_for_df(df, baseline):
             return df.reindex(baseline.index).bfill()
@@ -135,11 +142,15 @@ class TurtleStrategy(BaseStrategy):
         exit_date = self.universe[self.universe['signal']==0].index
 
         fig = plt.figure(figsize=(15, 8), constrained_layout=True)
-        gs = gridspec.GridSpec(6, 3, figure=fig)
+        gs = gridspec.GridSpec(7, 4, figure=fig)
         ax1 = plt.subplot(gs[0:2, :])
         ax2 = plt.subplot(gs[2:4, :])
-        ax3 = plt.subplot(gs[4, :])
-        ax4 = plt.subplot(gs[5, :])
+        ax3 = plt.subplot(gs[4, :2])
+        ax4 = plt.subplot(gs[5, :2])
+        ax5 = plt.subplot(gs[6, :2])
+        ax6 = plt.subplot(gs[4, 2:])
+        ax7 = plt.subplot(gs[5, 2:])
+        ax8 = plt.subplot(gs[6, 2:])
 
         ax1.plot(self.universe.close, label="Close Price")
         ax1.plot(self.universe['dc_high'], '#B97A95', label="DC-HIGH", alpha=1, linestyle="--")
@@ -150,26 +161,40 @@ class TurtleStrategy(BaseStrategy):
         ax1.legend(loc="upper left")
         ax1.grid()
 
-        ax2.plot(align_xticks_for_df(self.universe['value'], self.universe))
-        ax2.set_title("Portfolio value")
+        plot_drawdown_periods(self.universe['value'].pct_change(), top=5, ax=ax2)
         ax2.grid()
 
-        ax3.plot(align_xticks_for_df(self.universe['balance'], self.universe))
-        ax3.set_title("Balance")
+        plot_drawdown_underwater(self.universe['value'].pct_change(), ax=ax3)
         ax3.grid()
 
-        ax4.plot(align_xticks_for_df(self.universe['position'], self.universe))
-        ax4.set_title("Position")
+        ax4.plot(align_xticks_for_df(self.universe['balance'], self.universe))
+        ax4.set_title("Balance")
         ax4.grid()
 
+        ax5.plot(align_xticks_for_df(self.universe['total_amount'], self.universe))
+        ax5.set_title("Total amount of holding the asset")
+        ax5.grid()
+
+        plot_annual_returns(self.universe['value'].pct_change(), ax=ax6)
+        ax6.grid(axis="x")
+
+        plot_monthly_returns_heatmap(self.universe['value'].pct_change(), ax=ax7)
+
+        plot_monthly_returns_dist(self.universe['value'].pct_change(), ax=ax8)
+        ax8.grid(axis="y")
+
+        if whole_screen:
+            mng = plt.get_current_fig_manager()
+            mng.resize(*mng.window.maxsize())
         plt.show()
 
 
 class DonchianChannelStrategy(BaseStrategy):
 
     def __init__(self, universe, window_up=20, window_down=10):
-        super().__init__()
+        super(DonchianChannelStrategy, self).__init__()
         self.universe = universe
+        self.statements = None
         self.initialise(window_up, window_down)
 
     def initialise(self, window_up, window_down):
@@ -213,7 +238,7 @@ class DonchianChannelStrategy(BaseStrategy):
             fee=0.001, 
             stop_loss=0.1, 
             take_profit=0.5, 
-            position=0, 
+            total_amount=0, 
             quota=0.5, 
             verbose=True
         ):
@@ -226,53 +251,56 @@ class DonchianChannelStrategy(BaseStrategy):
             if (buy_price is not None) and (stop_loss is not None) and (row["close"] < buy_price*(1.0-stop_loss)):
                 stop_loss_price = row["close"]
                 stop_loss_date = pd.to_datetime(idx).date()
-                balance += stop_loss_price * math.floor(position * 0.5) * (1-fee)
-                position -= math.floor(position * 0.5)
+                balance += stop_loss_price * math.floor(total_amount * 0.5) * (1-fee)
+                total_amount -= math.floor(total_amount * 0.5)
                 if verbose:
                     print(f"Stop loss at price {stop_loss_price:.4f} on {stop_loss_date}")
                     print(f"Last buy at {buy_price:.4f}")
-                    print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                    print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                     print("-"*50)
             # Take profit
             elif (buy_price is not None) and (take_profit is not None) and (row["close"] >= buy_price*(1.0+take_profit)):
                 take_profit_price = row["close"]
                 take_profit_date = pd.to_datetime(idx).date()
-                balance += take_profit_price * math.floor(position * 0.5) * (1-fee)
-                position -= math.floor(position * 0.5)
+                balance += take_profit_price * math.floor(total_amount * 0.5) * (1-fee)
+                total_amount -= math.floor(total_amount * 0.5)
                 if verbose:
                     print(f"Take profit at price {take_profit_price:.4f} on {take_profit_date}")
                     print(f"Last buy at {take_profit_date:.4f}")
-                    print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                    print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                     print("-"*50)
 
             if row["signal"] == 1:
                 if balance > 0:
                     buy_price = row["close"]
                     buy_date = pd.to_datetime(idx).date()
-                    amount = math.floor(balance * quota / buy_price)
-                    balance -= amount * buy_price * (1+fee)
-                    position += amount
+                    buy_amount = balance * quota / buy_price
+                    balance -= buy_amount * buy_price * (1+fee)
+                    total_amount += buy_amount
                     if verbose:
-                        print(f"Buy {amount * buy_price:.4f} at {buy_price:.4f} on {buy_date}")
-                        print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                        print(f"Buy {buy_amount * buy_price:.4f} at {buy_price:.4f} on {buy_date}")
+                        print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                         print("-"*50)
             elif row["signal"] == 0:
-                if position > 1:
+                if total_amount > 1:
                     sell_price = row["close"]
                     sell_date = pd.to_datetime(idx).date()
-                    amount = math.floor(position * 0.5)
-                    balance += amount * sell_price * (1-fee)
-                    position -= amount
+                    sell_amount = total_amount * 0.5
+                    balance += sell_amount * sell_price * (1-fee)
+                    total_amount -= sell_amount
                     if verbose:
-                        print(f"Sell {amount * sell_price:.4f} at {sell_price:.4f} on {sell_date}")
-                        print(f"Balance: {balance:.4f} Position: {position:.4f}")
+                        print(f"Sell {sell_amount * sell_price:.4f} at {sell_price:.4f} on {sell_date}")
+                        print(f"Balance: {balance:.4f} Total amount: {total_amount:.4f}")
                         print("-"*50)
-            universe.loc[idx, "value"] = balance + position * row["close"]
+            universe.loc[idx, "value"] = balance + total_amount * row["close"]
             universe.loc[idx, "balance"] = balance
-            universe.loc[idx, "position"] = position
-        return universe
+            universe.loc[idx, "total_amount"] = total_amount
+        
+        statements = universe.copy()
 
-    def plot(self):
+        return statements
+
+    def plot(self, whole_screen=False):
 
         def align_xticks_for_df(df, baseline):
             return df.reindex(baseline.index).bfill()
@@ -281,11 +309,15 @@ class DonchianChannelStrategy(BaseStrategy):
         exit_date = self.universe[self.universe['signal']==0].index
 
         fig = plt.figure(figsize=(15, 8), constrained_layout=True)
-        gs = gridspec.GridSpec(6, 3, figure=fig)
+        gs = gridspec.GridSpec(7, 4, figure=fig)
         ax1 = plt.subplot(gs[0:2, :])
         ax2 = plt.subplot(gs[2:4, :])
-        ax3 = plt.subplot(gs[4, :])
-        ax4 = plt.subplot(gs[5, :])
+        ax3 = plt.subplot(gs[4, :2])
+        ax4 = plt.subplot(gs[5, :2])
+        ax5 = plt.subplot(gs[6, :2])
+        ax6 = plt.subplot(gs[4, 2:])
+        ax7 = plt.subplot(gs[5, 2:])
+        ax8 = plt.subplot(gs[6, 2:])
 
         ax1.plot(self.universe.close, label="Close Price")
         ax1.plot(self.universe['dc_high'], '#B97A95', label="DC-HIGH", alpha=1, linestyle="--")
@@ -296,16 +328,31 @@ class DonchianChannelStrategy(BaseStrategy):
         ax1.legend(loc="upper left")
         ax1.grid()
 
-        ax2.plot(align_xticks_for_df(self.universe['value'], self.universe))
-        ax2.set_title("Portfolio value")
+        plot_drawdown_periods(self.universe['value'].pct_change(), top=5, ax=ax2)
         ax2.grid()
 
-        ax3.plot(align_xticks_for_df(self.universe['balance'], self.universe))
-        ax3.set_title("Balance")
+        plot_drawdown_underwater(self.universe['value'].pct_change(), ax=ax3)
         ax3.grid()
 
-        ax4.plot(align_xticks_for_df(self.universe['position'], self.universe))
-        ax4.set_title("Position")
+        ax4.plot(align_xticks_for_df(self.universe['balance'], self.universe))
+        ax4.set_title("Balance")
         ax4.grid()
+
+        ax5.plot(align_xticks_for_df(self.universe['total_amount'], self.universe))
+        ax5.set_title("Total amount of holding the asset")
+        ax5.grid()
+
+        plot_annual_returns(self.universe['value'].pct_change(), ax=ax6)
+        ax6.grid(axis="x")
+
+        plot_monthly_returns_heatmap(self.universe['value'].pct_change(), ax=ax7)
+
+        plot_monthly_returns_dist(self.universe['value'].pct_change(), ax=ax8)
+        ax8.grid(axis="y")
+
+        if whole_screen:
+            mng = plt.get_current_fig_manager()
+            mng.resize(*mng.window.maxsize())
+        plt.show()
 
         plt.show()
