@@ -1,0 +1,1 @@
+CUDA_LAUNCH_BLOCKING=1 python umigame/experiments/run_text_classification.py

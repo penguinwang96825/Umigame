@@ -2,6 +2,7 @@ import pandas as pd
 import yfinance as yf
 from tqdm.auto import tqdm
 from .helper import fill_and_cut
+from ..utils import column_name_lower
 
 
 CRYPTO = {
@@ -44,6 +45,10 @@ def fetch_crypto(tickers=None, start="2012-01-01", end=TODAY_DATE, interval="1d"
     prices_dict = {
         t: yf.download(t, start=start, end=end, interval=interval, progress=False) 
         for t in tqdm(tickers, bar_format=format)
+    }
+    prices_dict = {
+        t: column_name_lower(df)
+        for t, df in prices_dict.items()
     }
 
     # Fill the prices' index with same start date and end date

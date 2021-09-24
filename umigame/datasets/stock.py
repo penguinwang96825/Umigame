@@ -51,6 +51,10 @@ def fetch_usstock(tickers=None, csv_file=None, start="2012-01-01", end=TODAY_DAT
         t: yf.download(t, start=start, end=end, interval=interval, progress=False) 
         for t in tqdm(tickers, bar_format=format)
     }
+    prices_dict = {
+        t: column_name_lower(df)
+        for t, df in prices_dict.items()
+    }
 
     # Fill the prices' index with same start date and end date
     if fill:
