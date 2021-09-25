@@ -68,7 +68,7 @@ class Engine(pl.LightningModule):
     def predict_proba(self, test_dataloader):
         y_probs = []
         with torch.no_grad():
-            for _, batch in tqdm(enumerate(test_dataloader, 0)):
+            for _, batch in enumerate(test_dataloader, 0):
                 inputs, targets = batch
                 inputs = inputs.to(self.device)
                 # Forward pass with inputs
