@@ -15,6 +15,7 @@ CURRENT_DIR = os.getcwd()
 sys.path.append(CURRENT_DIR)
 from umigame.nlp import labelling
 from umigame.nlp import engine
+from umigame.nlp.nnets import TextBERT, TextLSTM, TextCNN
 from umigame.datasets import fetch_crypto
 
 
@@ -65,58 +66,6 @@ class NewsDataset(torch.utils.data.Dataset):
         )
 
 
-class BertNewsModel(nn.Module):
-
-    def __init__(self):
-        super().__init__()
-        self.bert = transformers.BertModel.from_pretrained(
-            "bert-base-uncased", return_dict=False
-        )
-        self.bert_drop = nn.Dropout(0.3)
-        self.out = nn.Linear(768, 2)
-        self.freeze_bert()
-
-    def forward(self, ids):
-        _, o_2 = self.bert(ids)
-        b_o = self.bert_drop(o_2)
-        output = self.out(b_o)
-        return output
-
-    def freeze_bert(self):
-        for param in self.bert.parameters():
-            param.requires_grad = False
-
-
-class LogisticRegression(nn.Module):
-
-    def __init__(self, vocab_size, embedding_dim, hidden_dim, num_layers, dropout=0.1, bidirectional=True):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.lstm = nn.LSTM(
-            embedding_dim, 
-            hidden_dim, 
-            num_layers=num_layers, 
-            bidirectional=bidirectional, 
-            dropout=dropout,
-            batch_first=True
-        )
-        self.fc = nn.Linear(hidden_dim*2, 2)
-        self.act = nn.Sigmoid()
-        
-    def forward(self, text):
-        # embedded: [batch, seq_len, emb_dim]
-        embedded = self.embedding(text)
-        # packed_embedded = nn.utils.rnn.pack_padded_sequence(embedded, text_lengths, batch_first=True)
-        # hidden: [batch, num_layers * num_directions, hidden_dim]
-        # cell: [batch, num_layers * num_directions, hidden_dim]
-        packed_output, (hidden, cell) = self.lstm(embedded)
-        # hidden: [batch, hidden_dim * num_directions]
-        hidden = torch.cat((hidden[-2, :, :], hidden[-1, :, :]), dim=1)
-        # outputs: [batch, num_classes]
-        outputs = self.fc(hidden)
-        return outputs
-
-
 def main():
     file_path = os.path.join(MODULE_PATH, "..", "datasets", "text", "news.csv")
     news_df = pd.read_csv(file_path)
@@ -142,11 +91,12 @@ def main():
     test_dl = test_ds.create_dataloader(batch_size=128, shuffle=False, num_workers=4, drop_last=False)
 
     # model_engine = engine.Engine(BertNewsModel())
-    model_engine = engine.Engine(LogisticRegression(vocab_size=30522, embedding_dim=100, hidden_dim=32, num_layers=2))
+    model_engine = engine.Engine(TextCNN(vocab_size=30522, embedding_dim=200, channel_dim=64, kernel_list=[3, 4, 5], dropout=0.1, num_classes=2))
+    # model_engine = engine.Engine(TextLSTM(vocab_size=30522, embedding_dim=100, hidden_dim=32, num_layers=2))
     trainer = pl.Trainer(
         gpus=(1 if torch.cuda.is_available() else None), 
         deterministic=True, 
-        max_epochs=20, 
+        max_epochs=40, 
         precision=(16 if torch.cuda.is_available() else 32), 
         num_sanity_val_steps=0, 
         fast_dev_run=False
