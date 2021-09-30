@@ -52,26 +52,33 @@ class BreakthroughStrategy(BaseStrategy):
 
     def run(self):
         universe = self._get_price_data()
+        buy_next_bar, close_next_bar = False, False
 
         for idx, row in universe.iterrows():
+            if buy_next_bar:
+                buy_price = row["open"]
+                buy_date = pd.to_datetime(idx).date()
+                size = self.balance * (0.5) / buy_price
+                self.buy(buy_date, size, buy_price)
+                buy_next_bar = False
+                if self.show_progress:
+                    print(f"Open position @ {buy_price:.4f} on {buy_date}")
+            if close_next_bar:
+                close_price = row["open"]
+                close_date = pd.to_datetime(idx).date()
+                size = self.position
+                self.close(close_date, size, close_price, "sell")
+                close_next_bar = False
+                if self.show_progress:
+                    print(f"Close position @ {close_price:.4f} on {close_date}")
             # Open the position
             if row["signal"] == 1:
                 if self.position >= 0:
-                    buy_price = row["close"]
-                    buy_date = pd.to_datetime(idx).date()
-                    size = self.balance * (0.5) / row["close"]
-                    self.buy(buy_date, size, buy_price)
-                    if self.show_progress:
-                        print(f"Open position @ {buy_price:.4f} on {buy_date}")
+                    buy_next_bar = True
             # Close the position
             elif row["signal"] == -1:
                 if self.position > 0:
-                    sell_price = row["close"]
-                    sell_date = pd.to_datetime(idx).date()
-                    size = self.position
-                    self.close(sell_date, size, sell_price, "sell")
-                    if self.show_progress:
-                        print(f"Close position @ {sell_price:.4f} on {sell_date} (sell signal)")
+                    close_next_bar = True
 
         self.statements = pd.DataFrame(
             self.position_history, 
@@ -120,8 +127,12 @@ class BreakthroughStrategy(BaseStrategy):
         return pnl.set_index("date").sort_index()
 
     def _calculate_stats(self):
-        strategy_returns = self.universe["equity"].pct_change().values
-        benchmark_returns = self.universe["close"].pct_change().values
+        benchmark = BuyAndHoldStrategy(
+            self.ticker, self.capital, self.fees, self.start, self.end, show_progress=False
+        )
+        benchmark.run()
+        benchmark_returns = benchmark.universe["equity"].pct_change()
+        strategy_returns = self.universe["equity"].pct_change()
         sharpe_ratio = [
             ep.sharpe_ratio(strategy_returns, annualization=252), 
             ep.sharpe_ratio(benchmark_returns, annualization=252)

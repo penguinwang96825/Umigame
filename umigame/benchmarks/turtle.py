@@ -100,36 +100,47 @@ class TurtleSystem(BaseStrategy):
         universe = self._get_price_data()
         stop_loss = 0
         add_position_time = 0
+        buy_next_bar, close_next_bar, close_next_bar_sl = False, False, False
 
         for idx, row in universe.iterrows():
+            if buy_next_bar:
+                buy_price = row["open"]
+                buy_date = pd.to_datetime(idx).date()
+                size = (self.max_risk * self.balance) / row["atr"]
+                self.buy(buy_date, size, buy_price)
+                stop_loss = buy_price - 2.0 * row["atr"]
+                add_position_time += 1
+                buy_next_bar = False
+                if self.show_progress:
+                    print(f"Open position @ {buy_price:.4f} on {buy_date} wiht SL {stop_loss:.4f}")
+            if close_next_bar or close_next_bar_sl:
+                close_price = row["open"]
+                close_date = pd.to_datetime(idx).date()
+                size = self.position
+                if close_next_bar:
+                    self.close(close_date, size, close_price, "sell")
+                    close_next_bar = False
+                    if self.show_progress:
+                        print(f"Close position @ {close_price:.4f} on {close_date} (sell signal)")
+                if close_next_bar_sl:
+                    stop_loss = 0
+                    self.close(close_date, size, close_price, "sl")
+                    close_next_bar_sl = False
+                    if self.show_progress:
+                        print(f"Close position @ {close_price:.4f} on {close_date} (stop loss)")
+                if add_position_time == self.max_add:
+                    add_position_time = 0
             # Open the position
             if row["signal"] == 1:
                 if (self.position >= 0) and (add_position_time < self.max_add):
-                    buy_price = row["close"]
-                    buy_date = pd.to_datetime(idx).date()
-                    size = (self.max_risk * self.balance) / row["atr"]
-                    self.buy(buy_date, size, buy_price)
-                    stop_loss = buy_price - 2.0 * row["atr"]
-                    add_position_time += 1
-                    if self.show_progress:
-                        print(f"Open position @ {buy_price:.4f} on {buy_date} wiht SL {stop_loss:.4f}")
+                    buy_next_bar = True
             # Close the position
             elif (row["signal"] == -1) or (row["close"] < stop_loss):
                 if self.position > 0:
-                    sell_price = row["close"]
-                    sell_date = pd.to_datetime(idx).date()
-                    size = self.position
                     if row["signal"] == -1:
-                        self.close(sell_date, size, sell_price, "sell")
-                        if self.show_progress:
-                            print(f"Close position @ {sell_price:.4f} on {sell_date} (sell signal)")
+                        close_next_bar = True
                     elif row["close"] < stop_loss:
-                        stop_loss = 0
-                        self.close(sell_date, size, sell_price, "sl")
-                        if self.show_progress:
-                            print(f"Close position @ {sell_price:.4f} on {sell_date} (stop loss)")
-                    if add_position_time == self.max_add:
-                        add_position_time = 0
+                        close_next_bar_sl = True
 
         self.statements = pd.DataFrame(
             self.position_history, 
@@ -210,8 +221,12 @@ class TurtleSystem(BaseStrategy):
         return pnl.set_index("date").sort_index()
 
     def _calculate_stats(self):
-        strategy_returns = self.universe["equity"].pct_change().values
-        benchmark_returns = self.universe["close"].pct_change().values
+        benchmark = BuyAndHoldStrategy(
+            self.ticker, self.capital, self.fees, self.start, self.end, show_progress=False
+        )
+        benchmark.run()
+        benchmark_returns = benchmark.universe["equity"].pct_change()
+        strategy_returns = self.universe["equity"].pct_change()
         sharpe_ratio = [
             ep.sharpe_ratio(strategy_returns, annualization=252), 
             ep.sharpe_ratio(benchmark_returns, annualization=252)
