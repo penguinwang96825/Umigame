@@ -3,20 +3,21 @@ import matplotlib.pyplot as plt
 from umigame.benchmarks.turtle import TurtleSystem
 from umigame.benchmarks.base import BuyAndHoldStrategy
 from umigame.benchmarks.fourier import FourierStrategy
+from umigame.benchmarks.machine import MachineLearningStrategy
 from copy import deepcopy
 
 
 def main():
-    run_turtle()
+    run_machine()
 
 
 def test():
     ticker = "BTC-USD"
-    benchmark = BuyAndHoldStrategy(ticker, start="2018-01-01", show_progress=False)
+    benchmark = BuyAndHoldStrategy(ticker, capital=1000, start="2018-01-01", show_progress=False)
     benchmark.run()
-    turtle = TurtleSystem(ticker, start="2018-01-01", show_progress=False)
+    turtle = TurtleSystem(ticker, capital=1000, start="2018-01-01", show_progress=False)
     turtle.run()
-    fourier = FourierStrategy(ticker, start="2018-01-01", show_progress=False)
+    fourier = FourierStrategy(ticker, capital=1000, start="2018-01-01", show_progress=False)
     fourier.run()
 
     plt.figure(figsize=(15, 6))
@@ -28,13 +29,20 @@ def test():
     plt.show()
 
 
+def run_machine():
+    machine = MachineLearningStrategy(ticker="BTC-USD", start="2018-01-01", end="2021-09-28")
+    machine.run()
+    machine.plot()
+    machine.plot_risk()
+    print(machine.stats)
+
+
 def run_turtle():
-    turtle = TurtleSystem(ticker="BTC-USD", start="2018-01-01", end="2021-09-28", max_risk=0.01)
+    turtle = TurtleSystem(ticker="BTC-USD", capital=1000, start="2018-01-01", end="2021-09-28", max_risk=0.01)
     turtle.run()
-    # turtle.plot()
-    # turtle.plot_risk()
+    turtle.plot()
+    turtle.plot_risk()
     print(turtle.stats)
-    print(turtle.score("annual_return"))
 
 
 def run_fourier():
