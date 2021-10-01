@@ -3,5 +3,11 @@
 ## Install the packages
 
 ```bash
-sh setup.sh
+sh install_packages.sh
+```
+
+## Run Text Classification
+
+```bash
+sh run.sh
 ```
