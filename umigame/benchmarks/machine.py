@@ -48,7 +48,7 @@ class MachineLearningStrategy(BaseStrategy):
         self.pnl = None
 
     def _fit_ml(self, universe):
-        whole_data = fetch_crypto([self.ticker], "2015-01-01", self.end)[self.ticker]
+        whole_data = fetch_crypto([self.ticker], "2016-01-01", self.end)[self.ticker]
         features, labels = unfold_ts(
             whole_data.loc[:self.start, "close"], 
             look_back=self.look_back, 
@@ -61,7 +61,7 @@ class MachineLearningStrategy(BaseStrategy):
         acc = clf.score(features, labels)
         print(f"Accuracy: {acc:.4f}")
 
-        shape = whole_data.loc[self.start:].shape[0]
+        shape = whole_data.loc[self.start:self.end].shape[0]
         features_, labels_ = unfold_ts(
             whole_data["close"], 
             look_back=self.look_back, 
