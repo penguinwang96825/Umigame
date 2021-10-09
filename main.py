@@ -4,11 +4,12 @@ from umigame.benchmarks.turtle import TurtleSystem
 from umigame.benchmarks.base import BuyAndHoldStrategy
 from umigame.benchmarks.fourier import FourierStrategy
 from umigame.benchmarks.machine import MachineLearningStrategy
+from umigame.benchmarks.cci import CCIStrategy
 from copy import deepcopy
 
 
 def main():
-    run_machine()
+    run_cci()
 
 
 def test():
@@ -27,6 +28,14 @@ def test():
     plt.legend()
     plt.grid()
     plt.show()
+
+
+def run_cci():
+    cci_strategy = CCIStrategy(ticker="BTC-USD", start="2018-01-01", end="2021-09-28")
+    cci_strategy.run()
+    cci_strategy.plot()
+    cci_strategy.plot_risk()
+    print(cci_strategy.stats)
 
 
 def run_machine():
