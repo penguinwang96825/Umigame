@@ -9,6 +9,143 @@ from ..utils import column_name_lower, crossover, crossunder
 from ..plotting import *
 
 
+class TurtleAdvance(BaseStrategy):
+
+    def __init__(self):
+        super(TurtleAdvance, self).__init__()
+
+    def initialise_local(self):
+        self.last_buy_price = 0
+        self.hold_flag = False
+        self.limit_unit = 4
+        self.unit = 0
+        self.add_time = 0
+
+    def run(self, universe, capital=10000):
+        self.statements = self.trade(
+            universe, capital
+        )
+
+    def trade(self, universe, cash=1000):
+        self.cash = cash
+        self.position_value = 0
+        self.position_amount = 0
+        self.initialise_local()
+        entry, exit = self.generate_signals(universe)
+        universe["signal"] = 0
+        universe.loc[(entry==1).index, 'signal'] = 1
+        universe.loc[(exit==1).index, 'signal'] = -1
+        universe["atr"] = self.compute_atr(universe)
+
+        for idx, row in universe.iterrows():
+            current_price = row["close"]
+            current_atr = row["atr"]
+            # Distinguish whether to add position or stop loss
+            if (self.hold_flag is True) and (self.position_amount > 0):
+                situation = self.add_or_stop(
+                    current_price, 
+                    self.last_buy_price, 
+                    current_atr
+                )
+                # Consider it as adding position
+                if situation == 1:
+                    # Determining whether the number of position increases exceeds the upper limit
+                    if self.add_time < self.limit_unit:
+                        print("Generate adding position signal.")
+                        cash_amount = min(self.cash, self.unit*current_price)
+                        self.last_buy_price = current_price
+                        if cash_amount >= current_price:
+                            self.add_time += 1
+                            print(f"Place an order for ${cash_amount}")
+                            self.position_value += cash_amount
+                            self.position_amount += cash_amount / current_price
+                            self.cash -= cash_amount
+                        else:
+                            print("Invalid order since can't place an order for less than the minimum transaction.")
+                    else:
+                        print("The maximum number of position increases has been reached and no additional positions will be taken")
+                # Consider it as stopping loss
+                elif situation == -1:
+                    # Re-initialise the parameter
+                    self.initialise_local()
+                    print("Generate stop loss signal.")
+                    print(f"Sold in quantities of {self.position_amount}")
+                    self.position_value = 0
+                    self.position_amount = 0
+                    self.cash += self.position_amount * current_price
+            # Distinguish whether to buy or sell the instrument
+            else:
+                if row["signal"] == 1:
+                    if self.hold_flag is False:
+                        self.unit = self.compute_unit(self.cash, current_atr)
+                        self.add_time = 1
+                        self.hold_flag = True
+                        self.last_buy_price = current_price
+                        cash_amount = min(self.cash, self.unit*current_price)
+                        print("Generate buy signal.")
+                        print(f"Place an order for ${cash_amount}")
+                        self.position_value += cash_amount
+                        self.position_amount += cash_amount / current_price
+                        self.cash -= cash_amount
+                    else:
+                        print("Already buy the instrument.")
+                elif row["signal"] == -1:
+                    if self.hold_flag is True:
+                        if self.position_amount >= 1:
+                            print("Generate sell signal")
+                            self.initialise_local()
+                            print(f"Sold in quantities of {self.position_amount}")
+                            self.position_value = 0
+                            self.position_amount = 0
+                            self.cash += self.position_amount * current_price
+                    else:
+                        print("Already sell the instrument.")
+            universe.loc[idx, "value"] = self.position_value
+            universe.loc[idx, "balance"] = self.cash
+            universe.loc[idx, "total_amount"] = self.position_amount
+        self.statements = universe
+
+    def compute_unit(self, cash, atr):
+        # UNIT = BALANCE * 0.01 / ATR
+        return cash * 0.01 / atr
+
+    def compute_atr(self, universe, window_atr=20):
+        return talib.ATR(
+            universe["high"], 
+            universe["low"], 
+            universe["close"], 
+            timeperiod=window_atr
+        )
+
+    def generate_signals(self, universe):
+        universe['dc_high'] = talib.MAX(universe["high"], timeperiod=20).shift(1)
+        universe['dc_low'] = talib.MIN(universe["low"], timeperiod=10).shift(1)
+        # Compute signal based on Donchian Channel
+        entry = crossover(universe["close"], universe['dc_high']).astype(int)
+        exit = crossunder(universe["close"], universe['dc_low']).astype(int)
+        entry[entry==0], exit[exit==0] = np.nan, np.nan
+        entry, exit = entry[~np.isnan(entry)], exit[~np.isnan(exit)]
+        return entry, exit
+
+    def add_or_stop(self, price, last_price, atr):
+        """
+        Parameters
+        ----------
+        price: float
+            Current price.
+        last_price: float
+            Last price.
+        atr: float
+            Average True Range (ATR) technical indicator.
+        """
+        if price >= last_price + 0.5 * atr:
+            return 1
+        elif price <= last_price - 2 * atr:
+            return -1
+        else:
+            return 0
+
+
 class TurtleStrategy(BaseStrategy):
 
     RISK_COEFFICIENT = 0.01

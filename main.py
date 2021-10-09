@@ -1,6 +1,6 @@
 import umigame
 import matplotlib.pyplot as plt
-from umigame.benchmarks.turtle import TurtleStrategy, DonchianChannelStrategy
+from umigame.benchmarks.turtle import TurtleStrategy, DonchianChannelStrategy, TurtleAdvance
 from umigame.benchmarks.base import BuyAndHoldStrategy
 from umigame.benchmarks.fourier import fourier_denoise
 
@@ -29,29 +29,32 @@ def run():
     universe = umigame.datasets.fetch_crypto(tickers=[crypto])[crypto]
     # stock = "AAPL"
     # universe = umigame.datasets.fetch_usstock(tickers=[stock])[stock]
-    universe = universe.dropna().loc["2017":]
+    universe = universe.dropna().loc["2017"]
     portfolio = {}
 
+    # turtle = TurtleAdvance()
+    # turtle.run(universe, capital=100000)
+
     turtle = TurtleStrategy(universe, window_up=20, window_down=10, window_atr=20)
-    turtle.run(capital=100000, fee=0.001, stop_loss=0.1, take_profit=None, verbose=False)
+    turtle.run(capital=10000, fee=0.001, stop_loss=0.1, take_profit=None, verbose=True)
     portfolio["turtle"] = turtle.statements["value"]
     # print(turtle.score("max_drawdown"))
     print(portfolio["turtle"])
-    # turtle.plot()
+    turtle.plot()
 
-    donchian = DonchianChannelStrategy(universe, window_up=20, window_down=10)
-    donchian.run(capital=1000, fee=0.001, quota=0.5, stop_loss=0.1, take_profit=None, verbose=False)
-    portfolio["donchian"] = donchian.statements["value"]
-    # print(donchian.score("max_drawdown"))
-    print(portfolio["donchian"])
-    # donchian.plot()
+    # donchian = DonchianChannelStrategy(universe, window_up=20, window_down=10)
+    # donchian.run(capital=1000, fee=0.001, quota=0.5, stop_loss=0.1, take_profit=None, verbose=False)
+    # portfolio["donchian"] = donchian.statements["value"]
+    # # print(donchian.score("max_drawdown"))
+    # print(portfolio["donchian"])
+    # # donchian.plot()
 
-    benchmark = BuyAndHoldStrategy(universe)
-    benchmark.run(capital=100000, fee=0.001, verbose=False)
-    portfolio["benchmark"] = benchmark.statements["value"]
-    # print(benchmark.score("max_drawdown"))
-    print(portfolio["benchmark"])
-    # benchmark.plot()
+    # benchmark = BuyAndHoldStrategy(universe)
+    # benchmark.run(capital=100000, fee=0.001, verbose=False)
+    # portfolio["benchmark"] = benchmark.statements["value"]
+    # # print(benchmark.score("max_drawdown"))
+    # print(portfolio["benchmark"])
+    # # benchmark.plot()
 
     # print("A")
     # print(portfolio["turtle"])
@@ -62,7 +65,7 @@ def run():
     # print("C")
     # print(portfolio["benchmark"])
     # print("-"*50)
-    print(portfolio)
+    # print(portfolio)
 
 
 def plot():
@@ -77,13 +80,13 @@ def plot():
         plt.subplot(2, 2, idx+1)
         plt.title(f"Year {year}")
         turtle = TurtleStrategy(universe, window_up=20, window_down=10, window_atr=20)
-        turtle.run(capital=100000, fee=0.001, stop_loss=0.1, take_profit=None, verbose=False)
+        turtle.run(capital=100000, fee=0.001, stop_loss=None, take_profit=None, verbose=False)
         turtle_portfolio_value = turtle.statements["value"]
         plt.plot(turtle_portfolio_value, color="tab:blue", label="Turtle")
         print(turtle.score("max_drawdown"))
         # turtle.plot()
         donchian = DonchianChannelStrategy(universe, window_up=20, window_down=10)
-        donchian.run(capital=100000, fee=0.001, quota=0.5, stop_loss=0.1, take_profit=None, verbose=False)
+        donchian.run(capital=100000, fee=0.001, quota=0.5, stop_loss=None, take_profit=None, verbose=False)
         donchian_portfolio_value = donchian.statements["value"]
         plt.plot(donchian_portfolio_value, color="tab:green", label="Donchian")
         print(donchian.score("max_drawdown"))
