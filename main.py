@@ -9,7 +9,7 @@ from copy import deepcopy
 
 
 def main():
-    run_cci()
+    test()
 
 
 def test():
