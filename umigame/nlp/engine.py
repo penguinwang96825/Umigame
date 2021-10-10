@@ -34,8 +34,9 @@ class Engine(pl.LightningModule):
         x, y = batch
         logits = self.forward(x)
         loss = F.cross_entropy(logits, y.long())
-        acc = (logits.argmax(-1) == y).float()
-        return {'loss': loss, 'acc': acc.detach(), 'log': {'train_loss': loss}}
+        acc = (logits.argmax(-1) == y).detach().float()
+        torch.cuda.empty_cache()
+        return {'loss': loss, 'acc': acc, 'log': {'train_loss': loss}}
 
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
@@ -47,8 +48,9 @@ class Engine(pl.LightningModule):
         x, y = batch
         logits = self.forward(x)
         loss = F.cross_entropy(logits, y.long())
-        acc = (logits.argmax(-1) == y).float()
-        return {'loss': loss, 'acc': acc.detach()}
+        acc = (logits.argmax(-1) == y).detach().float()
+        torch.cuda.empty_cache()
+        return {'loss': loss, 'acc': acc}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
@@ -62,8 +64,9 @@ class Engine(pl.LightningModule):
         x, y = batch
         logits = self.forward(x)
         loss = F.cross_entropy(logits, y.long())
-        acc = (logits.argmax(-1) == y).float()
-        return {'test_loss': loss, 'test_acc': acc.detach()}
+        acc = (logits.argmax(-1) == y).detach().float()
+        torch.cuda.empty_cache()
+        return {'test_loss': loss, 'test_acc': acc}
 
     def predict_proba(self, test_dataloader):
         y_probs = []
@@ -73,25 +76,19 @@ class Engine(pl.LightningModule):
                 inputs = inputs.to(self.device)
                 # Forward pass with inputs
                 outputs = self(inputs)
-                _, predicted = torch.max(outputs.data, 1)
                 # Store outputs
-                y_probs.extend(predicted.cpu())
+                y_probs.extend(outputs.cpu())
         return softmax(np.vstack(y_probs), axis=1)
 
     def score(self, test_dataloader):
         correct, total = 0, 0
         with torch.no_grad():
-            # Iterate over the test data and generate predictions
-            for _, data in enumerate(test_dataloader, 0):
-                # Get inputs
-                inputs, targets = data
-                # Generate outputs
+            for _, batch in enumerate(test_dataloader, 0):
+                inputs, targets = batch
                 outputs = self(inputs)
-                # Set total and correct
                 _, predicted = torch.max(outputs.data, 1)
                 total += targets.size(0)
                 correct += (predicted == targets).sum().item()
-            # Print accuracy
             print('Accuracy: %d %%' % (100 * correct / total))
         return correct / total
 
