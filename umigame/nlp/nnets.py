@@ -1,15 +1,47 @@
 import math
 import torch
+import gensim
 import transformers
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+from collections import OrderedDict
+
+
+class TextLR(nn.Module):
+
+    def __init__(self, vocab_size=20000, embedding_dim=300, weights=None, num_classes=2, dropout=0.1):
+        super(TextLR, self).__init__()
+        if weights is not None:
+            vocab_size = weights.shape[0]
+            embedding_dim = weights.shape[1]
+            weights = torch.FloatTensor(weights)
+            self.embed = nn.Embedding(vocab_size, embedding_dim)
+            self.embed.weight.data.copy_(weights)
+            print(weights.size())
+        else:
+            self.embed = nn.Embedding(vocab_size, embedding_dim)
+        self.drop = nn.Dropout(p=dropout)
+        self.classifier = nn.Linear(embedding_dim, num_classes)
+        # self.classifier = nn.Sequential(OrderedDict([
+        #     ('hidden', nn.Linear(self.embedding_dim, self.embedding_dim)), 
+        #     ('bn', nn.BatchNorm1d(self.embedding_dim)), 
+        #     ('dropout', nn.Dropout(p=dropout)), 
+        #     ('nonlinearity', nn.ReLU(inplace=True)), 
+        #     ('output', nn.Linear(self.embedding_dim, num_classes))
+        # ]))
+
+    def forward(self, x):
+        x = self.embed(x)
+        x = torch.mean(x, dim=1)
+        x = self.classifier(self.drop(x))
+        return x
 
 
 class TextBERT(nn.Module):
 
     def __init__(self, num_classes=2, dropout=0.3, freeze=True):
-        super().__init__()
+        super(TextBERT).__init__()
         self.bert = transformers.BertModel.from_pretrained(
             "bert-base-uncased", return_dict=False
         )
@@ -38,11 +70,18 @@ class TextCNN(nn.Module):
             channel_dim, 
             kernel_list, 
             dropout, 
+            weights=None, 
             num_classes=2
         ):
         super(TextCNN, self).__init__()
-        self.embed = nn.Embedding(vocab_size, embedding_dim)
-        # self.embed.weight.data.copy_(vocab_built.vectors)
+        if weights is not None:
+            vocab_size = weights.shape[0]
+            embedding_dim = weights.shape[1]
+            weights = torch.FloatTensor(weights)
+            self.embed = nn.Embedding(vocab_size, embedding_dim)
+            self.embed.weight.data.copy_(weights)
+        else:
+            self.embed = nn.Embedding(vocab_size, embedding_dim)
         self.convs = nn.ModuleList([nn.Conv2d(1, channel_dim, (w, embedding_dim)) for w in kernel_list])
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(len(kernel_list)*channel_dim, num_classes)
@@ -68,10 +107,18 @@ class TextLSTM(nn.Module):
             hidden_dim, 
             num_layers, 
             dropout=0.1, 
+            weights=None, 
             bidirectional=True
         ):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        super(TextLSTM, self).__init__()
+        if weights is not None:
+            vocab_size = weights.shape[0]
+            embedding_dim = weights.shape[1]
+            weights = torch.FloatTensor(weights)
+            self.embed = nn.Embedding(vocab_size, embedding_dim)
+            self.embed.weight.data.copy_(weights)
+        else:
+            self.embed = nn.Embedding(vocab_size, embedding_dim)
         self.lstm = nn.LSTM(
             embedding_dim, 
             hidden_dim, 
@@ -85,7 +132,7 @@ class TextLSTM(nn.Module):
         
     def forward(self, text):
         # embedded: [batch, seq_len, emb_dim]
-        embedded = self.embedding(text)
+        embedded = self.embed(text)
         # hidden: [batch, num_layers * num_directions, hidden_dim]
         # cell: [batch, num_layers * num_directions, hidden_dim]
         packed_output, (hidden, cell) = self.lstm(embedded)
@@ -99,7 +146,7 @@ class TextLSTM(nn.Module):
 class Flatten(nn.Module):
 
     def __init__(self):
-        super().__init__()
+        super(Flatten, self).__init__()
 
     def forward(self, x):
         return x.view(x.size(0), -1)
@@ -127,7 +174,7 @@ class StatsPool(nn.Module):
 class PositionEncoding(nn.Module):
     
     def __init__(self, model_dim, max_seq_len=80):
-        super().__init__()
+        super(PositionEncoding, self).__init__()
         self.model_dim = model_dim
 
         pe = torch.zeros(max_seq_len, model_dim)
