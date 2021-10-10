@@ -1,5 +1,3 @@
-<<<<<<< HEAD
-=======
 import umigame
 import matplotlib.pyplot as plt
 from umigame.benchmarks.turtle import TurtleSystem
@@ -66,4 +64,3 @@ def run_fourier():
 
 if __name__ == "__main__":
     main()
->>>>>>> 92ff16e6ae58c64b02aabb5ba8b6a1aaf12204e7
