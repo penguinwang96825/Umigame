@@ -1,4 +1,5 @@
 empyrical
+gensim
 matplotlib
 numpy
 pandas
