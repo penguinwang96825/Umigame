@@ -1,38 +1,48 @@
 import math
 import torch
-import gensim
 import transformers
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from collections import OrderedDict
+from .attention import SelfAttention
 
 
 class TextLR(nn.Module):
 
-    def __init__(self, vocab_size=20000, embedding_dim=300, weights=None, num_classes=2, dropout=0.1):
+    def __init__(self, vocab_size=20000, embedding_dim=300, num_classes=2, dropout=0.1):
         super(TextLR, self).__init__()
-        if weights is not None:
-            vocab_size = weights.shape[0]
-            embedding_dim = weights.shape[1]
-            weights = torch.FloatTensor(weights)
-            self.embed = nn.Embedding(vocab_size, embedding_dim)
-            self.embed.weight.data.copy_(weights)
-            print(weights.size())
-        else:
-            self.embed = nn.Embedding(vocab_size, embedding_dim)
+        self.embed = nn.Embedding(vocab_size, embedding_dim)
         self.drop = nn.Dropout(p=dropout)
         self.classifier = nn.Linear(embedding_dim, num_classes)
-        # self.classifier = nn.Sequential(OrderedDict([
-        #     ('hidden', nn.Linear(self.embedding_dim, self.embedding_dim)), 
-        #     ('bn', nn.BatchNorm1d(self.embedding_dim)), 
-        #     ('dropout', nn.Dropout(p=dropout)), 
-        #     ('nonlinearity', nn.ReLU(inplace=True)), 
-        #     ('output', nn.Linear(self.embedding_dim, num_classes))
-        # ]))
 
     def forward(self, x):
         x = self.embed(x)
+        x = torch.mean(x, dim=1)
+        x = self.classifier(self.drop(x))
+        return x
+
+
+class TextAttention(nn.Module):
+
+    def __init__(self, vocab_size=20000, embedding_dim=300, num_classes=2, dropout=0.1, trainable=True):
+        super(TextAttention, self).__init__()
+        self.embed = nn.Embedding(vocab_size, embedding_dim)
+        # self.pool = StatsPool()
+        self.drop = nn.Dropout(p=dropout)
+        self.attn = SelfAttention(dimensions=embedding_dim, trainable=trainable)
+        self.classifier = nn.Sequential(OrderedDict([
+            ('hidden', nn.Linear(embedding_dim, embedding_dim)), 
+            ('bn', nn.BatchNorm1d(embedding_dim)), 
+            ('dropout', nn.Dropout(p=dropout)), 
+            ('nonlinearity', nn.ReLU(inplace=True)), 
+            ('output', nn.Linear(embedding_dim, num_classes))
+        ]))
+
+    def forward(self, x):
+        x = self.embed(x)
+        x, _ = self.attn(x)
+        # x = self.pool(x)
         x = torch.mean(x, dim=1)
         x = self.classifier(self.drop(x))
         return x
@@ -70,18 +80,10 @@ class TextCNN(nn.Module):
             channel_dim, 
             kernel_list, 
             dropout, 
-            weights=None, 
             num_classes=2
         ):
         super(TextCNN, self).__init__()
-        if weights is not None:
-            vocab_size = weights.shape[0]
-            embedding_dim = weights.shape[1]
-            weights = torch.FloatTensor(weights)
-            self.embed = nn.Embedding(vocab_size, embedding_dim)
-            self.embed.weight.data.copy_(weights)
-        else:
-            self.embed = nn.Embedding(vocab_size, embedding_dim)
+        self.embed = nn.Embedding(vocab_size, embedding_dim)
         self.convs = nn.ModuleList([nn.Conv2d(1, channel_dim, (w, embedding_dim)) for w in kernel_list])
         self.dropout = nn.Dropout(dropout)
         self.fc = nn.Linear(len(kernel_list)*channel_dim, num_classes)
@@ -106,19 +108,11 @@ class TextLSTM(nn.Module):
             embedding_dim, 
             hidden_dim, 
             num_layers, 
-            dropout=0.1, 
-            weights=None, 
+            dropout=0.1,  
             bidirectional=True
         ):
         super(TextLSTM, self).__init__()
-        if weights is not None:
-            vocab_size = weights.shape[0]
-            embedding_dim = weights.shape[1]
-            weights = torch.FloatTensor(weights)
-            self.embed = nn.Embedding(vocab_size, embedding_dim)
-            self.embed.weight.data.copy_(weights)
-        else:
-            self.embed = nn.Embedding(vocab_size, embedding_dim)
+        self.embed = nn.Embedding(vocab_size, embedding_dim)
         self.lstm = nn.LSTM(
             embedding_dim, 
             hidden_dim, 
