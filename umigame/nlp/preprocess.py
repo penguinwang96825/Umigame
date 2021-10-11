@@ -35,17 +35,19 @@ class Preprocessor(object):
             return [re.split('\W+', doc.lower()) for doc in documents]
 
     def build(self, documents):
+        self.special_tokens = {'<PAD>':0, '<UNK>':1}
         self.tokenised_documents = self.tokenise(documents)
         self.vocab = Counter(chain(*[doc for doc in self.tokenised_documents]))
         if self.vocab_size is not None:
-            self.vocab_size = min(len(self.vocab), self.vocab_size)
+            self.vocab_size = min(len(self.vocab), self.vocab_size-len(self.special_tokens))
             self.vocab = self.vocab.most_common(self.vocab_size)
             self.vocab = [v for v, c in self.vocab]
         else:
             self.vocab = self.vocab.keys()
-        self.word2idx = {'<PAD>':0, '<UNK>':1}
+        self.word2idx = self.special_tokens
         for i, doc in enumerate(self.tokenised_documents):
             for j, token in enumerate(doc):
                 if (self.word2idx.get(token) is None) and (token in self.vocab):
                     self.word2idx[token] = len(self.word2idx)
         self.idx2word = {idx:word for word, idx in self.word2idx.items()}
+        self.vocab_size = len(self.word2idx)
