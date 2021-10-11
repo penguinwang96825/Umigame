@@ -3,6 +3,24 @@ import torch
 import torch.nn as nn
 
 
+class SelfAttention(nn.Module):
+
+    def __init__(self, dimensions, trainable=True):
+        super(SelfAttention, self).__init__()
+        self.dimensions = dimensions
+        self.softmax = nn.Softmax(dim=-1)
+        if trainable:
+            self.attn = ParametricSelfAttention(dimensions)
+        else:
+            self.attn = NonparametricSelfAttention(dimensions)
+
+    def forward(self, context, return_weights=True):
+        context_, attention_weights = self.attn(context)
+        if return_weights:
+            return context_ , attention_weights
+        return context_ 
+
+
 class NonparametricSelfAttention(nn.Module):
     """
     Examples
@@ -92,16 +110,16 @@ class ParametricSelfAttention(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 
-if __name__ == "__main__":
-    context = torch.Tensor([
-            [
-                [0.6, 0.2, 0.8], 
-                [0.2, 0.3, 0.1], 
-                [0.9, 0.1, 0.8], 
-                [0.4, 0.1, 0.4], 
-                [0.4, 0.1, 0.6]
-            ]
-        ])
-    context_, attention_weights = ParametricSelfAttention(3)(context)
-    print("Input: ", context_.shape)
-    print("Output: ", context_.shape)
+# if __name__ == "__main__":
+#     context = torch.Tensor([
+#             [
+#                 [0.6, 0.2, 0.8], 
+#                 [0.2, 0.3, 0.1], 
+#                 [0.9, 0.1, 0.8], 
+#                 [0.4, 0.1, 0.4], 
+#                 [0.4, 0.1, 0.6]
+#             ]
+#         ])
+#     context_, attention_weights = ParametricSelfAttention(3)(context)
+#     print("Input: ", context_.shape)
+#     print("Output: ", context_.shape)
