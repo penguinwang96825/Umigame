@@ -22,17 +22,17 @@ from umigame.datasets import fetch_crypto
 
 class SimpleTextDataset(torch.utils.data.Dataset):
 
-    def __init__(self, texts, targets):
-        self.texts = texts
+    def __init__(self, ids, targets):
+        self.ids = ids
         self.targets = targets
 
     def __len__(self):
         return len(self.targets)
 
     def __getitem__(self, item):
-        text = torch.tensor(self.texts[item], dtype=torch.long)
+        id_ = torch.tensor(self.ids[item], dtype=torch.long)
         target = torch.tensor(self.targets[item], dtype=torch.float)
-        return text, target
+        return id_, target
 
 
 class NewsBertDataset(torch.utils.data.Dataset):
