@@ -2,10 +2,13 @@ empyrical
 gensim
 matplotlib
 numpy
+optuna
 pandas
 pytorch-lightning
 scikit-learn
 seaborn
+swifter
 transformers
 tqdm
+xgboost
 yfinance
