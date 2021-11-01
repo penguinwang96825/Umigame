@@ -2,7 +2,6 @@ import pandas as pd
 import yfinance as yf
 from os.path import dirname
 from pathlib import Path
-from tqdm.auto import tqdm
 from ..utils import column_name_lower
 from .helper import fill_and_cut
 
@@ -49,7 +48,7 @@ def fetch_usstock(tickers=None, csv_file=None, start="2012-01-01", end=TODAY_DAT
     format = '{l_bar}{bar:40}{r_bar}{bar:-40b}'
     prices_dict = {
         t: yf.download(t, start=start, end=end, interval=interval, progress=False) 
-        for t in tqdm(tickers, bar_format=format)
+        for t in tickers
     }
     prices_dict = {
         t: column_name_lower(df)
