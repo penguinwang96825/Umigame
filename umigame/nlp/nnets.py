@@ -28,23 +28,21 @@ class TextAttention(nn.Module):
     def __init__(self, vocab_size=20000, embedding_dim=300, num_classes=2, dropout=0.1, trainable=True):
         super(TextAttention, self).__init__()
         self.embed = nn.Embedding(vocab_size, embedding_dim)
-        # self.pool = StatsPool()
         self.drop = nn.Dropout(p=dropout)
         self.attn = SelfAttention(dimensions=embedding_dim, trainable=trainable)
         self.classifier = nn.Sequential(OrderedDict([
-            ('hidden', nn.Linear(embedding_dim, embedding_dim)), 
-            ('bn', nn.BatchNorm1d(embedding_dim)), 
-            ('dropout', nn.Dropout(p=dropout)), 
-            ('nonlinearity', nn.ReLU(inplace=True)), 
-            ('output', nn.Linear(embedding_dim, num_classes))
+            ('hidden', nn.Linear(embedding_dim, embedding_dim//2)), 
+            ('bn', nn.BatchNorm1d(embedding_dim//2)), 
+            # ('dropout', nn.Dropout(p=dropout)), 
+            ('nonlinearity', nn.LeakyReLU(inplace=True)), 
+            ('output', nn.Linear(embedding_dim//2, num_classes))
         ]))
 
     def forward(self, x):
         x = self.embed(x)
         x, _ = self.attn(x)
-        # x = self.pool(x)
         x = torch.mean(x, dim=1)
-        x = self.classifier(self.drop(x))
+        x = self.classifier(x)
         return x
 
 
@@ -165,26 +163,58 @@ class StatsPool(nn.Module):
         return x
 
 
-class PositionEncoding(nn.Module):
-    
-    def __init__(self, model_dim, max_seq_len=80):
-        super(PositionEncoding, self).__init__()
-        self.model_dim = model_dim
+class PositionalEncoding(nn.Module):
 
-        pe = torch.zeros(max_seq_len, model_dim)
-        for pos in range(max_seq_len):
-            for i in range(0, model_dim, 2):
-                pe[pos, i] = \
-                math.sin(pos / (10000 ** ((2 * i)/model_dim)))
-                pe[pos, i + 1] = \
-                math.cos(pos / (10000 ** ((2 * (i + 1))/model_dim)))
-                
-        pe = pe.unsqueeze(0)
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(max_len, 1, d_model)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
         self.register_buffer('pe', pe)
- 
-    
+
     def forward(self, x):
-        x = x * math.sqrt(self.model_dim)
-        seq_len = x.size(1)
-        x = x + Variable(self.pe[:, :seq_len], requires_grad=False)
-        return x
+        """
+        Args:
+            x: Tensor, shape [batch_size, seq_len, embedding_dim]
+        """
+        x = x + self.pe[:x.size(0)]
+        return self.dropout(x)
+
+
+class Initialiser(object):
+    """
+    References
+    ----------
+    1. https://github.com/3ammor/Weights-Initializer-pytorch
+    """
+    @staticmethod
+    def initialise(model, initialization, **kwargs):
+
+        def weights_init(m):
+            if isinstance(m, nn.Conv2d):
+                initialization(m.weight.data, **kwargs)
+                try:
+                    initialization(m.bias.data)
+                except:
+                    pass
+
+            elif isinstance(m, nn.Linear):
+                initialization(m.weight.data, **kwargs)
+                try:
+                    initialization(m.bias.data)
+                except:
+                    pass
+
+            elif isinstance(m, nn.BatchNorm2d):
+                m.weight.data.fill_(1.0)
+                m.bias.data.fill_(0)
+
+            elif isinstance(m, nn.BatchNorm1d):
+                m.weight.data.fill_(1.0)
+                m.bias.data.fill_(0)
+
+        model.apply(weights_init)
