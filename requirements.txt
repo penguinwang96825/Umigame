@@ -1,4 +1,5 @@
 empyrical
+fastparquet
 gensim
 matplotlib
 numpy
