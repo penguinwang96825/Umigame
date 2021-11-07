@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 
 
-def fixed_time_horizon(df, column='close', lookahead=20):
+def fixed_time_horizon(df, column='close', lookback=20):
     """
     Fixed-time Horizon
     As it relates to finance, virtually all ML papers label observations using the fixed-time horizon method.
@@ -27,11 +27,11 @@ def fixed_time_horizon(df, column='close', lookahead=20):
     5. Dixon et al., Classification-based financial markets prediction using deep neural networks, 2017
     """
     price = df[column]
-    label = (price.shift(-lookahead) / price > 1).astype(int)
+    label = (price.shift(-lookback) / price > 1).astype(int)
     return label
 
 
-def triple_barrier(df, column='close', ub=0.07, lb=0.03, max_period=20):
+def triple_barrier(df, column='close', ub=0.07, lb=0.03, lookback=20, binary_classification=True):
     """
     Triple Barrier
     The idea is to consider the full dynamics of a trading strategy and not a simple performance proxy. 
@@ -48,7 +48,7 @@ def triple_barrier(df, column='close', ub=0.07, lb=0.03, max_period=20):
         It stands for upper bound, e.g. 0.07 is a 7% profit taking.
     lb: float
         It stands for lower bound, e.g. 0.03 is a 3% stop loss.
-    max_period: str
+    lookback: str
         Maximum holding time.
 
     References
@@ -65,14 +65,14 @@ def triple_barrier(df, column='close', ub=0.07, lb=0.03, max_period=20):
     def end_price(s):
         return np.append(s[(s / s[0] > ub) | (s / s[0] < lb)], s[-1])[0]/s[0]
 
-    r = np.array(range(max_period))
+    r = np.array(range(lookback))
 
     def end_time(s):
-        return np.append(r[(s / s[0] > ub) | (s / s[0] < lb)], max_period-1)[0]
+        return np.append(r[(s / s[0] > ub) | (s / s[0] < lb)], lookback-1)[0]
 
     price = df[column]
-    p = price.rolling(max_period).apply(end_price, raw=True).shift(-max_period+1)
-    t = price.rolling(max_period).apply(end_time, raw=True).shift(-max_period+1)
+    p = price.rolling(lookback).apply(end_price, raw=True).shift(-lookback+1)
+    t = price.rolling(lookback).apply(end_time, raw=True).shift(-lookback+1)
     t = pd.Series(
         [t.index[int(k+i)] if not math.isnan(k+i) else np.datetime64('NaT') 
         for i, k in enumerate(t)], index=t.index
@@ -81,7 +81,8 @@ def triple_barrier(df, column='close', ub=0.07, lb=0.03, max_period=20):
     label = pd.Series(0, p.index)
     label.loc[p > ub] = 1
     label.loc[p < lb] = -1
-    label = np.where(label == 1, 1, 0)
+    if binary_classification:
+        label = np.where(label == 1, 1, 0)
 
     return pd.Series(label, index=price.index)
 
